@@ -1,0 +1,223 @@
+#define BLYNK_TEMPLATE_ID "TMPL6icePpN6F"
+#define BLYNK_TEMPLATE_NAME "IOT SMART DEVICE"
+#define BLYNK_AUTH_TOKEN "F2oGGgRBq50E-guECHSRvfEd3RlWOQN8"
+ 
+// Your WiFi credentials
+char auth[] = BLYNK_AUTH_TOKEN;//Enter your Auth token
+char ssid[] = "Nishant";//Enter your WIFI name
+char pass[] = "9815324688";//Enter your WIFI password
+ 
+ 
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <DHT.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <LiquidCrystal_I2C.h>
+ 
+#define DHTPIN            2 //D4  pin connected with DHT
+// Uncomment whatever type you're using!
+#define DHTTYPE DHT11     // DHT 11
+//#define DHTTYPE DHT22   // DHT 22, AM2302, AM2321
+//#define DHTTYPE DHT21   // DHT 21, AM2301
+ 
+//Initialize the LCD display
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+ 
+// Setpoint and setHumi values (in degrees Celsius)
+float setTemp = 0;
+float setHumi = 0;
+float currentTemp = 0;
+float currentHumi = 0;
+ 
+// define the GPIO connected with Relays and Buttons
+#define RelayPin1 14  //D5
+#define RelayPin2 12  //D6
+ 
+#define wifiLed   16   //D0
+ 
+//Change the virtual pins according the rooms
+#define VPIN_Text           V0
+#define VPIN_Mode           V1
+#define VPIN_currentTemp    V2
+#define VPIN_currentHumi    V3
+#define VPIN_setTemp        V4
+#define VPIN_setHumi        V5
+#define VPIN_Heater         V6
+#define VPIN_Humidifier     V7
+ 
+// Relay and Mode State
+bool heaterState = LOW; //Define integer to remember the toggle state for heater
+bool humidifierState = LOW; //Define integer to remember the toggle state for Humidifier
+bool modeState = LOW; //Define integer to remember the mode
+ 
+int wifiFlag = 0;
+ 
+BlynkTimer timer;
+DHT dht(DHTPIN, DHTTYPE);
+ 
+// When App button is pushed - switch the state
+ 
+BLYNK_WRITE(VPIN_Heater) {
+  heaterState = param.asInt();
+  digitalWrite(RelayPin1, !heaterState);
+}
+ 
+BLYNK_WRITE(VPIN_Humidifier) {
+  humidifierState = param.asInt();
+  digitalWrite(RelayPin2, !humidifierState);
+}
+ 
+BLYNK_WRITE(VPIN_Mode) {
+  modeState = param.asInt();
+}
+ 
+BLYNK_WRITE(VPIN_setTemp) {
+  setTemp = param.asFloat();
+}
+ 
+BLYNK_WRITE(VPIN_setHumi) {
+  setHumi = param.asFloat();
+}
+ 
+void checkBlynkStatus() { // called every 2 seconds by SimpleTimer
+ 
+  bool isconnected = Blynk.connected();
+  if (isconnected == false) {
+    wifiFlag = 1;
+    Serial.println("Blynk Not Connected");
+    digitalWrite(wifiLed, LOW);
+  }
+  if (isconnected == true) {
+    wifiFlag = 0;
+    digitalWrite(wifiLed, HIGH);
+    Blynk.virtualWrite(VPIN_Text, "IoT Temperature & Humidity Controller");
+  }
+  delay(1000);
+}
+ 
+BLYNK_CONNECTED() {
+  // update the latest state to the server
+  Blynk.virtualWrite(VPIN_Text, "IoT Temperature & Humidity Controller");
+  Blynk.virtualWrite(VPIN_Mode, modeState);
+  Blynk.syncVirtual(VPIN_currentTemp);
+  Blynk.syncVirtual(VPIN_currentHumi);
+  Blynk.syncVirtual(VPIN_setTemp);
+  Blynk.syncVirtual(VPIN_setHumi);
+  Blynk.virtualWrite(VPIN_Heater, heaterState);
+  Blynk.virtualWrite(VPIN_Humidifier, humidifierState);
+ 
+}
+ 
+void setup()
+{
+  Serial.begin(115200);
+ 
+  pinMode(RelayPin1, OUTPUT);
+  pinMode(RelayPin2, OUTPUT);
+  pinMode(wifiLed, OUTPUT);
+ 
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(1, 0);
+  lcd.print("Smart IoT Device");
+  for (int a = 0; a <= 15; a++) {
+    lcd.setCursor(a, 1);
+    lcd.print(".");
+    delay(500);
+  }
+  lcd.clear();
+ 
+  //During Starting all Relays should TURN OFF
+  digitalWrite(RelayPin1, !heaterState);
+  digitalWrite(RelayPin2, !humidifierState);
+ 
+  dht.begin();    // Enabling DHT sensor
+  digitalWrite(wifiLed, LOW);
+ 
+  //Blynk.begin(auth, ssid, pass);
+  WiFi.begin(ssid, pass);
+  timer.setInterval(2000L, checkBlynkStatus); // check if Blynk server is connected every 2 seconds
+  timer.setInterval(1000L, sendSensor); // Sending Sensor Data to Blynk Cloud every 1 second
+  Blynk.config(auth);
+  delay(1000);
+ 
+  Blynk.virtualWrite(VPIN_Heater, heaterState);
+  Blynk.virtualWrite(VPIN_Humidifier, humidifierState);
+  Blynk.virtualWrite(VPIN_setTemp, setTemp);
+  Blynk.virtualWrite(VPIN_setHumi, setHumi);
+}
+ 
+ 
+void readSensor() {
+ 
+  currentTemp = dht.readTemperature();
+  currentHumi = dht.readHumidity();
+  if (isnan(currentHumi) || isnan(currentTemp)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+}
+ 
+void sendSensor()
+{
+  readSensor();
+  // You can send any value at any time.
+  // Please don't send more that 10 values per second.
+  Blynk.virtualWrite(VPIN_Text, "IoT Temperature & Humidity Controller");
+  Blynk.virtualWrite(VPIN_currentTemp, currentTemp);
+  Blynk.virtualWrite(VPIN_currentHumi, currentHumi);
+}
+ 
+ 
+void DisplayData()  {
+  lcd.setCursor(0, 0);
+  lcd.print("T:");
+  lcd.print(int(currentTemp));
+  lcd.print((char)223);
+  lcd.print("C");
+  lcd.setCursor(9, 0);
+  lcd.print("TH:");
+  lcd.print(int(currentHumi));
+  lcd.print("%");
+ 
+ 
+  if (modeState == 1) {
+    lcd.setCursor(0, 1);
+  lcd.print("Mode: Automatic");
+    if (currentTemp < setTemp) {
+      heaterState = 1;
+      digitalWrite(RelayPin1, !heaterState);
+      Serial.println("Heater ON");
+      Blynk.virtualWrite(VPIN_Heater, heaterState);
+    } else {
+      heaterState = 0;
+      digitalWrite(RelayPin1, !heaterState);
+      Serial.println("Heater OFF");
+      Blynk.virtualWrite(VPIN_Heater, heaterState);
+    } if (currentHumi < setHumi) {
+      humidifierState = 1;
+      digitalWrite(RelayPin2, !humidifierState);
+      Serial.println("Humidifier ON");
+      Blynk.virtualWrite(VPIN_Humidifier, humidifierState);
+    } else {
+      humidifierState = 0;
+      digitalWrite(RelayPin2, !humidifierState);
+      Serial.println("Humidifier OFF");
+      Blynk.virtualWrite(VPIN_Humidifier, humidifierState);
+    }
+  } else {
+    lcd.setCursor(0, 1);
+  lcd.print("  Mode: Manual  ");
+  }
+}
+ 
+ 
+void loop()
+{
+  Blynk.run();
+  timer.run();
+  DisplayData();
+}
