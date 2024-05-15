@@ -1,0 +1,66 @@
+#define BLYNK_TEMPLATE_ID "TMPL6Oehe0Bd-"
+#define BLYNK_TEMPLATE_NAME "IOT plant watering"
+#define BLYNK_AUTH_TOKEN "Xfot-djwWLXPxXbgE_caiGYtK6mleUao"
+
+#define BLYNK_TEMPLATE_ID "TMPL6Oehe0Bd-"
+#define BLYNK_TEMPLATE_NAME "IOT plant watering"
+#define BLYNK_AUTH_TOKEN "Xfot-djwWLXPxXbgE_caiGYtK6mleUao"
+
+#define BLYNK_PRINT Serial
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+char auth1[] = BLYNK_AUTH_TOKEN;
+char auth2[] = BLYNK_AUTH_TOKEN;
+
+char ssid[] = "shrestha@vianet";  // Enter your wifi name
+char pass[] = "zero375809";  // Enter your wifi password
+
+int smokeA0_1 = A0;  // Analog pin for Project 1
+int smokeA0_2 = D5;  // Analog pin for Project 2
+int data_1 = 0;
+int data_2 = 0;
+int sensorThres = 100;
+
+BlynkTimer timer;
+
+void sendSensor1(){
+  int data_1 = analogRead(smokeA0_1);
+  Blynk.virtualWrite(V0, data_1);
+  Serial.print("Pin A0 for Project 1: ");
+  Serial.println(data_1);
+
+  if(data_1 > 999) {
+//    Blynk.email("test@gmail.com", "Alert", "Gas Leakage Detected - Project 1!");
+    Blynk.logEvent("gas_alert", "Gas Leakage Detected - Project 1");
+  }
+}
+
+void sendSensor2(){
+  int data_2 = analogRead(smokeA0_2);
+  Blynk.virtualWrite(V1, data_2);  // Use a different virtual pin for Project 2
+  Serial.print("Pin A0 for Project 2: ");
+  Serial.println(data_2);
+
+  if(data_2 > 999) {
+ //   Blynk.email("test@gmail.com", "Alert", "Gas Leakage Detected - Project 2!");
+    Blynk.logEvent("gas_alert", "Gas Leakage Detected - Project 2");
+  }
+}
+
+void setup(){
+  pinMode(smokeA0_1, INPUT);
+  pinMode(smokeA0_2, INPUT);
+  Serial.begin(115200);
+  
+  Blynk.begin(auth1, ssid, pass);
+  timer.setInterval(2500L, sendSensor1);
+
+  Blynk.begin(auth2, ssid, pass);
+  timer.setInterval(2500L, sendSensor2);
+}
+
+void loop(){
+  Blynk.run();
+timer.run();
+}
