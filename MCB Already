@@ -1,0 +1,41 @@
+#define BLYNK_TEMPLATE_ID "TMPL6fAy0P_dp"
+#define BLYNK_TEMPLATE_NAME "HOME AUTOMATION"
+#define BLYNK_AUTH_TOKEN "f5hb6CQHKIHqRooyDuP7Tabu57GB_2kS"
+
+#define BLYNK_PRINT Serial
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <Servo.h> // Include the Servo library
+
+char ssid[] = "shrestha@vianet";
+char pass[] = "zero375809";
+
+Servo servo1, servo2; // Declare servo objects
+
+BLYNK_WRITE(V0)
+{
+  int s0 = param.asInt(); 
+  servo1.write(s0);
+  Blynk.virtualWrite(V2, s0);
+} 
+
+BLYNK_WRITE(V1)
+{
+  int s1 = param.asInt(); 
+  servo2.write(s1);
+  Blynk.virtualWrite(V3, s1);
+} 
+
+void setup()
+{
+  Serial.begin(9600);
+  servo1.attach(D2); // Connect to Pin D2 in NodeMCU
+  servo2.attach(D3); // Connect to Pin D3 in NodeMCU
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass); // Corrected Blynk.begin() function
+  delay(2000); // Splash screen delay
+}
+
+void loop() 
+{
+  Blynk.run();
+}
