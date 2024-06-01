@@ -1,0 +1,55 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <DHT.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // Set the LCD address and dimensions
+int alcoholSensorPin = A0;  // Pin to which the alcohol sensor is connected
+int motorControlPin = 4;   // Pin to control the motor (via a relay)
+int buzzerPin = 5;         // Pin to control the buzzer
+
+#define DHTPIN 6               // Pin to which the DHT22 sensor is connected
+#define DHTTYPE DHT22            // DHT22 sensor type, change to DHT11 if you are using that sensor
+DHT dht(DHTPIN, DHTTYPE);
+
+void setup() {
+  lcd.init();                      // Initialize the LCD
+  lcd.backlight();                 // Turn on the backlight
+  pinMode(motorControlPin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
+  Serial.begin(9600);              // Initialize serial communication
+  dht.begin();                     // Initialize the DHT sensor
+}
+
+void loop() {
+  int alcoholValue = analogRead(alcoholSensorPin);  // Read alcohol sensor value
+  float temperature = dht.readTemperature();        // Read temperature from DHT22
+  float humidity = dht.readHumidity();              // Read humidity from DHT22
+
+  Serial.print("Alcohol Level: ");
+  Serial.println(alcoholValue);
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.print(" °C, Humidity: ");
+  Serial.print(humidity);
+  Serial.println("%");
+
+  if (alcoholValue > 500) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Alcohol Detected");
+    lcd.setCursor(0, 1);
+    lcd.print("Motor Stopped");
+    digitalWrite(motorControlPin, LOW);  // Stop the motor
+    tone(buzzerPin, 1000);  // Activate the buzzer
+    delay(2000);  // Wait for 2 seconds
+    noTone(buzzerPin);  // Turn off the buzzer
+  } else {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("No Alcohol");
+    lcd.setCursor(0, 1);
+    lcd.print("Temp: " + String(temperature) + "C, Humidity: " + String(humidity) + "%");
+    digitalWrite(motorControlPin, HIGH);  // Start the motor
+  }
+  delay(1000);  // Delay for 1 second between readings
+}
