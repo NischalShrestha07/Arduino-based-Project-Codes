@@ -1,0 +1,34 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // Set the LCD address to 0x27 for a 16 chars and 2 line display
+
+const int heartRatePin = A0;  // Analog pin connected to AD8232 sensor
+
+void setup() {
+  lcd.init();                      // Initialize the LCD
+  lcd.backlight();                 // Turn on backlight
+  Serial.begin(9600);             // Initialize serial communication
+}
+
+void loop() {
+  int heartRate = getHeartRate(); // Get heart rate from sensor
+  displayHeartRate(heartRate);    // Display heart rate on LCD
+  delay(1000);                    // Update every second
+}
+
+int getHeartRate() {
+  int sensorValue = analogRead(heartRatePin); // Read analog value from sensor
+  // Add code to process analog value and calculate heart rate
+  int heartRate = map(sensorValue, 0, 1023, 60, 150); // Example mapping from analog value to heart rate
+  return heartRate;
+}
+
+void displayHeartRate(int rate) {
+  lcd.clear();                           // Clear the LCD
+  lcd.setCursor(0, 0);                   // Set cursor to first column of first row
+  lcd.print("Heart Rate:");              // Print label
+  lcd.setCursor(0, 1);                   // Set cursor to first column of second row
+  lcd.print(rate);                       // Print heart rate
+  lcd.print(" BPM");                     // Print units
+}
