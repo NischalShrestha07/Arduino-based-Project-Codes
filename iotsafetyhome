@@ -1,0 +1,94 @@
+#include <ArduinoJson.h>
+#include <ArduinoJson.hpp>
+#include <ESP8266WiFi.h>
+//#include <WiFiClient>
+#include <WiFiClientSecureBearSSL.h>
+#include <ESP8266HTTPClient.h>
+#include <UniversalTelegramBot.h>
+
+// Replace with your network credentials
+const char* ssid = "shrestha@vianet";
+const char* password = "zero375809";
+
+// Initialize Telegram BOT
+#define BOTtoken "6583855076:AAEm48rg4kk5xcuK5u7WmUxs-uc0mECY1mQ"  // your Bot Token (Get from Botfather)
+#define CHAT_ID "6203727608"    // get from ID Bot
+
+const int gasSensor = 14;     // Change the pin to your gas sensor pin
+const int flameSensor = 12;
+const int earthquakeSensor = 13; // Change the pin to your earthquake sensor pin
+
+bool gasDetected = false;
+bool flameDetected = false;
+bool earthquakeDetected = false;
+
+void IRAM_ATTR detectsGas() {
+  gasDetected = true;
+}
+
+void IRAM_ATTR detectsFlame() {
+  flameDetected = true;
+}
+
+void IRAM_ATTR detectsEarthquake() {
+  earthquakeDetected = true;
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure);
+  client->setInsecure();  
+  UniversalTelegramBot bot(BOTtoken, *client);
+
+  pinMode(gasSensor, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(gasSensor), detectsGas, RISING);
+
+  pinMode(flameSensor, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(flameSensor), detectsFlame, RISING);
+
+  pinMode(earthquakeSensor, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(earthquakeSensor), detectsEarthquake, RISING);
+
+  Serial.print("Connecting Wifi: ");
+  Serial.println(ssid);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  bot.sendMessage(CHAT_ID, "Device Activated and initiating the process.", "");
+}
+
+void loop() {
+  std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure);
+  client->setInsecure();  
+  UniversalTelegramBot bot(BOTtoken, *client);
+
+  if (gasDetected) {
+    bot.sendMessage(CHAT_ID, "Gas Leakage Detected Alert!!!", "");
+    Serial.println("Gas Leakage Alert!!!");
+    gasDetected = false;
+  }
+
+  if (flameDetected) {
+    bot.sendMessage(CHAT_ID, "pet Food Is Finished *_*", "");
+    Serial.println("Fire Alert!!!");
+    flameDetected = false;
+  }
+
+  if (earthquakeDetected) {
+    bot.sendMessage(CHAT_ID, "Earthquake Detected Alert!!!", "");
+    Serial.println("Earthquake Alert!!!");
+    earthquakeDetected=false;
+}
+}
