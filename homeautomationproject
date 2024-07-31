@@ -1,0 +1,198 @@
+#define BLYNK_TEMPLATE_ID "TMPL6icePpN6F"
+#define BLYNK_TEMPLATE_NAME "IOT SMART DEVICE"
+#define BLYNK_AUTH_TOKEN "Jl996uUSOgNoYJWH_a0GZYNl2nmawfqa"
+
+char ssid[] = "shrestha@vianet"; // Enter your WIFI name
+char pass[] = "zero375809"; // Enter your WIFI password
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+
+#define RelayPin1 5  // D1
+#define RelayPin2 4  // D2
+#define RelayPin3 14 // D5
+#define RelayPin4 12 // D6
+
+#define SwitchPin1 10 // SD3
+#define SwitchPin2 0  // D3 
+#define SwitchPin3 13 // D7
+#define SwitchPin4 3  // RX
+
+#define wifiLed 16 // D0
+
+#define VPIN_BUTTON_1 V1
+#define VPIN_BUTTON_2 V2
+#define VPIN_BUTTON_3 V3
+#define VPIN_BUTTON_4 V4
+
+int toggleState_1 = 1;
+int toggleState_2 = 1;
+int toggleState_3 = 1;
+int toggleState_4 = 1;
+
+int wifiFlag = 0;
+
+BlynkTimer timer;
+
+void relayOnOff(int relay) {
+  switch (relay) {
+    case 1:
+      if (toggleState_1 == 1) {
+        digitalWrite(RelayPin1, LOW); // turn on relay 1
+        toggleState_1 = 0;
+        Serial.println("Device1 ON");
+      } else {
+        digitalWrite(RelayPin1, HIGH); // turn off relay 1
+        toggleState_1 = 1;
+        Serial.println("Device1 OFF");
+      }
+      delay(100);
+      break;
+    case 2:
+      if (toggleState_2 == 1) {
+        digitalWrite(RelayPin2, LOW); // turn on relay 2
+        toggleState_2 = 0;
+        Serial.println("Device2 ON");
+      } else {
+        digitalWrite(RelayPin2, HIGH); // turn off relay 2
+        toggleState_2 = 1;
+        Serial.println("Device2 OFF");
+      }
+      delay(100);
+      break;
+    case 3:
+      if (toggleState_3 == 1) {
+        digitalWrite(RelayPin3, LOW); // turn on relay 3
+        toggleState_3 = 0;
+        Serial.println("Device3 ON");
+      } else {
+        digitalWrite(RelayPin3, HIGH); // turn off relay 3
+        toggleState_3 = 1;
+        Serial.println("Device3 OFF");
+      }
+      delay(100);
+      break;
+    case 4:
+      if (toggleState_4 == 1) {
+        digitalWrite(RelayPin4, LOW); // turn on relay 4
+        toggleState_4 = 0;
+        Serial.println("Device4 ON");
+      } else {
+        digitalWrite(RelayPin4, HIGH); // turn off relay 4
+        toggleState_4 = 1;
+        Serial.println("Device4 OFF");
+      }
+      delay(100);
+      break;
+    default:
+      break;
+  }
+}
+
+void with_internet() {
+  if (digitalRead(SwitchPin1) == LOW) {
+    delay(200);
+    relayOnOff(1);
+    Blynk.virtualWrite(VPIN_BUTTON_1, toggleState_1); // Update Button Widget
+  } else if (digitalRead(SwitchPin2) == LOW) {
+    delay(200);
+    relayOnOff(2);
+    Blynk.virtualWrite(VPIN_BUTTON_2, toggleState_2); // Update Button Widget
+  } else if (digitalRead(SwitchPin3) == LOW) {
+    delay(200);
+    relayOnOff(3);
+    Blynk.virtualWrite(VPIN_BUTTON_3, toggleState_3); // Update Button Widget
+  } else if (digitalRead(SwitchPin4) == LOW) {
+    delay(200);
+    relayOnOff(4);
+    Blynk.virtualWrite(VPIN_BUTTON_4, toggleState_4); // Update Button Widget
+  }
+}
+
+void without_internet() {
+  if (digitalRead(SwitchPin1) == LOW) {
+    delay(200);
+    relayOnOff(1);
+  } else if (digitalRead(SwitchPin2) == LOW) {
+    delay(200);
+    relayOnOff(2);
+  } else if (digitalRead(SwitchPin3) == LOW) {
+    delay(200);
+    relayOnOff(3);
+  } else if (digitalRead(SwitchPin4) == LOW) {
+    delay(200);
+    relayOnOff(4);
+  }
+}
+
+BLYNK_CONNECTED() {
+  Blynk.syncVirtual(VPIN_BUTTON_1);
+  Blynk.syncVirtual(VPIN_BUTTON_2);
+  Blynk.syncVirtual(VPIN_BUTTON_3);
+  Blynk.syncVirtual(VPIN_BUTTON_4);
+}
+
+BLYNK_WRITE(VPIN_BUTTON_1) {
+  toggleState_1 = param.asInt();
+  digitalWrite(RelayPin1, toggleState_1);
+}
+
+BLYNK_WRITE(VPIN_BUTTON_2) {
+  toggleState_2 = param.asInt();
+  digitalWrite(RelayPin2, toggleState_2);
+}
+
+BLYNK_WRITE(VPIN_BUTTON_3) {
+  toggleState_3 = param.asInt();
+  digitalWrite(RelayPin3, toggleState_3);
+}
+
+BLYNK_WRITE(VPIN_BUTTON_4) {
+  toggleState_4 = param.asInt();
+  digitalWrite(RelayPin4, toggleState_4);
+}
+
+void checkBlynkStatus() {
+  bool isconnected = Blynk.connected();
+  if (isconnected == false) {
+    wifiFlag = 1;
+    digitalWrite(wifiLed, HIGH); // Turn off WiFi LED
+  }
+  if (isconnected == true) {
+    wifiFlag = 0;
+    digitalWrite(wifiLed, LOW); // Turn on WiFi LED
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(RelayPin1, OUTPUT);
+  pinMode(RelayPin2, OUTPUT);
+  pinMode(RelayPin3, OUTPUT);
+  pinMode(RelayPin4, OUTPUT);
+
+  pinMode(wifiLed, OUTPUT);
+
+  pinMode(SwitchPin1, INPUT_PULLUP);
+  pinMode(SwitchPin2, INPUT_PULLUP);
+  pinMode(SwitchPin3, INPUT_PULLUP);
+  pinMode(SwitchPin4, INPUT_PULLUP);
+
+  digitalWrite(RelayPin1, toggleState_1);
+  digitalWrite(RelayPin2, toggleState_2);
+  digitalWrite(RelayPin3, toggleState_3);
+  digitalWrite(RelayPin4, toggleState_4);
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+  timer.setInterval(3000L, checkBlynkStatus);
+}
+
+void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Not Connected");
+  } else {
+    Serial.println("WiFi Connected");
+    Blynk.run();
+}
+}
