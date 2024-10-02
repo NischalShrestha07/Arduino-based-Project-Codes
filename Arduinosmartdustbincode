@@ -1,0 +1,55 @@
+#include <Servo.h>
+
+// Define ultrasonic sensor pins
+const int trigPin = 9;
+const int echoPin = 8;
+
+// Define servo motor
+Servo dustbinLid;  
+const int servoPin = 10;
+
+// Variables for distance calculation
+long duration;
+int distance;
+
+void setup() {
+  // Start the serial monitor for debugging
+  Serial.begin(9600);
+  
+  // Set up ultrasonic sensor pins
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  
+  // Attach the servo motor to pin
+  dustbinLid.attach(servoPin);
+  
+  // Initialize the lid in closed position
+  dustbinLid.write(0);  // 0 degrees (closed)
+}
+
+void loop() {
+  // Trigger the ultrasonic sensor
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // Read the echo pin, and calculate distance
+  duration = pulseIn(echoPin, HIGH);
+  distance = duration * 0.034 / 2;
+
+  // Print the distance for debugging
+  Serial.print("Distance: ");
+  Serial.println(distance);
+
+  // If an object is within 20 cm, open the lid
+  if (distance < 20) {
+    dustbinLid.write(90);  // 90 degrees (open)
+    delay(3000);           // Keep the lid open for 3 seconds
+  } else {
+    dustbinLid.write(0);   // 0 degrees (closed)
+  }
+  
+  delay(100);  // Short delay before the next measurement
+}
