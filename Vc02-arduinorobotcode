@@ -1,0 +1,135 @@
+#include <Servo.h>
+
+unsigned int receivedValue = 0;
+Servo myservo;  // Create servo object to control a servo
+
+// Define relay pins
+const int relay1Pin = 10;
+const int relay2Pin = 11;
+
+// Define motor driver pins for the RC car using L298N motor driver
+const int motor1Pin1 = 2;  // Left motor forward
+const int motor1Pin2 = 3;  // Left motor backward
+const int motor2Pin1 = 4;  // Right motor forward
+const int motor2Pin2 = 5;  // Right motor backward
+const int enablePin1 = 6;  // Left motor enable
+const int enablePin2 = 7;  // Right motor enable
+
+void setup() {
+  myservo.attach(9);  // Attaches the servo on pin 9 to the servo object
+  Serial.begin(9600);
+
+  // Initialize relay pins as OUTPUT
+  pinMode(relay1Pin, OUTPUT);
+  pinMode(relay2Pin, OUTPUT);
+
+  // Set relay pins to LOW initially (relay OFF)
+  digitalWrite(relay1Pin, LOW);
+  digitalWrite(relay2Pin, LOW);
+
+  // Initialize motor driver pins as OUTPUT
+  pinMode(motor1Pin1, OUTPUT);  // Left motor forward
+  pinMode(motor1Pin2, OUTPUT);  // Left motor backward
+  pinMode(motor2Pin1, OUTPUT);  // Right motor forward
+  pinMode(motor2Pin2, OUTPUT);  // Right motor backward
+  pinMode(enablePin1, OUTPUT);  // Left motor enable
+  pinMode(enablePin2, OUTPUT);  // Right motor enable
+
+  // Stop motors initially
+  digitalWrite(enablePin1, LOW);
+  digitalWrite(enablePin2, LOW);
+}
+
+void loop() {
+  if (Serial.available()) {
+    Serial.println("Data From VC-02");
+    // Read the incoming bytes
+    byte highByte = Serial.read();
+    byte lowByte = Serial.read();
+
+    // Combine the two bytes into a single 16-bit value
+    receivedValue = (highByte << 8) | lowByte;
+
+    // Print the received value in HEX format
+    Serial.print("Received HEX value: 0x");
+    Serial.println(receivedValue, HEX);
+  }
+
+  // Control servo motor based on received value
+  if (receivedValue == 0xA190) {  // Move servo to 90 degrees
+    myservo.write(90);
+    delay(15);
+  } 
+  else if (receivedValue == 0xA145) {  // Move servo to 45 degrees
+    myservo.write(45);
+    delay(15);
+  } 
+  else if (receivedValue == 0xAA00) {  // Move servo to 120 degrees
+    myservo.write(120);
+    delay(15);
+  }
+
+  // Control relays based on received value
+  else if (receivedValue == 0xAA11) {  // Turn Relay 1 ON
+    digitalWrite(relay1Pin, LOW);  // Relay ON
+    Serial.println("Relay 1 ON");
+  } 
+  else if (receivedValue == 0xBB00) {  // Turn Relay 1 OFF
+    digitalWrite(relay1Pin, HIGH);  // Relay OFF
+    Serial.println("Relay 1 OFF");
+  } 
+  else if (receivedValue == 0xAC01) {  // Turn Relay 2 ON
+    digitalWrite(relay2Pin, HIGH);  // Relay ON
+    Serial.println("Relay 2 ON");
+  } 
+  else if (receivedValue == 0xAC02) {  // Turn Relay 2 OFF
+    digitalWrite(relay2Pin, LOW);  // Relay OFF
+    Serial.println("Relay 2 OFF");
+  }
+
+  // RC Car control using L298N motor driver
+  else if (receivedValue == 0xBB10) {  // Move car forward
+    digitalWrite(motor1Pin1, HIGH);  // Left motor forward
+    digitalWrite(motor1Pin2, LOW);   // Left motor off backward
+    digitalWrite(motor2Pin1, HIGH);  // Right motor forward
+    digitalWrite(motor2Pin2, LOW);   // Right motor off backward
+    digitalWrite(enablePin1, HIGH);  // Enable left motor
+    digitalWrite(enablePin2, HIGH);  // Enable right motor
+    Serial.println("Car moving forward");
+  } 
+  else if (receivedValue == 0xBB11) {  // Move car backward
+    digitalWrite(motor1Pin1, LOW);  // Left motor off forward
+    digitalWrite(motor1Pin2, HIGH); // Left motor backward
+    digitalWrite(motor2Pin1, LOW);  // Right motor off forward
+    digitalWrite(motor2Pin2, HIGH); // Right motor backward
+    digitalWrite(enablePin1, HIGH); // Enable left motor
+    digitalWrite(enablePin2, HIGH); // Enable right motor
+    Serial.println("Car moving backward");
+  } 
+  else if (receivedValue == 0xCC00) {  // Turn car left
+    digitalWrite(motor1Pin1, LOW);   // Left motor off forward
+    digitalWrite(motor1Pin2, HIGH);  // Left motor backward
+    digitalWrite(motor2Pin1, HIGH);  // Right motor forward
+    digitalWrite(motor2Pin2, LOW);   // Right motor off backward
+    digitalWrite(enablePin1, HIGH);  // Enable left motor
+    digitalWrite(enablePin2, HIGH);  // Enable right motor
+    Serial.println("Car turning left");
+  } 
+  else if (receivedValue == 0xCC11) {  // Turn car right
+    digitalWrite(motor1Pin1, HIGH);  // Left motor forward
+    digitalWrite(motor1Pin2, LOW);   // Left motor off backward
+    digitalWrite(motor2Pin1, LOW);   // Right motor off forward
+    digitalWrite(motor2Pin2, HIGH);  // Right motor backward
+    digitalWrite(enablePin1, HIGH);  // Enable left motor
+    digitalWrite(enablePin2, HIGH);  // Enable right motor
+    Serial.println("Car turning right");
+  } 
+  else if (receivedValue == 0xCC10) {  // Stop car
+    digitalWrite(enablePin1, LOW);  // Disable left motor
+    digitalWrite(enablePin2, LOW);  // Disable right motor
+    Serial.println("Car stopped");
+  }
+
+  delay(10);  // Small delay to avoid rapid consecutive commands
+  receivedValue = 0;  // Reset receivedValue after processing
+}
