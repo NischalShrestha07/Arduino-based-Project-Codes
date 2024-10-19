@@ -1,0 +1,68 @@
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <Wire.h>
+#include <MPU6050.h>
+
+const char* ssid = "shrestha@vianet";       // Replace with your Wi-Fi SSID
+const char* password = "shrestha4688"; // Replace with your Wi-Fi password
+
+MPU6050 mpu;
+WiFiClient client;
+IPAddress receiverIP(192, 168, 1, 71); // IP address of the 2nd ESP8266
+
+void setup() {
+  Serial.begin(115200);
+  delay(10);
+  Serial.println();
+  
+  // Connect to Wi-Fi
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+
+  // Initialize MPU6050
+  Wire.begin();
+  mpu.initialize();
+  if (!mpu.testConnection()) {
+    Serial.println("MPU6050 connection failed");
+    while (1); // Stay here if the connection fails
+  }
+  Serial.println("MPU6050 connected successfully");
+}
+
+void loop() {
+  // Read accelerometer data
+  int16_t ax, ay, az;
+  mpu.getAcceleration(&ax, &ay, &az);
+
+  // Print the accelerometer data
+  Serial.print("Acceleration X: ");
+  Serial.print(ax);
+  Serial.print(" | Y: ");
+  Serial.print(ay);
+  Serial.print(" | Z: ");
+  Serial.println(az);
+
+  // Send data based on acceleration in the X-axis
+  if (ax > 1000) { // Change threshold as needed
+    if (client.connect(receiverIP, 80)) {
+      client.print("a");
+      client.stop();
+      Serial.println("Sent: a");
+    }
+  } else {
+    if (client.connect(receiverIP, 80)) {
+      client.print("b");
+      client.stop();
+      Serial.println("Sent: b");
+    }
+  }
+
+  delay(1000); // Adjust delay as needed
+}
