@@ -16,7 +16,7 @@ const char* password = "robot";
 #define IN_2 2     // L298N in2 motors Right       GPIO2(D4)
 #define IN_3 12    // L298N in3 motors Left        GPIO12(D6)
 #define IN_4 13    // L298N in4 motors Left        GPIO13(D7)
-#define ENB 14    // Enable/speed motors Left     GPIO15(D8)
+#define ENB 14    // Enable/speed motors Left     GPIO15(D5)
 
 #define Light 15 // Light  GPIO16(D0)
 
