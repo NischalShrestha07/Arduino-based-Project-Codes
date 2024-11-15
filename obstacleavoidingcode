@@ -6,7 +6,7 @@ const int LeftMotorForward = 7;
 const int LeftMotorBackward = 6;
 const int RightMotorForward = 5;
 const int RightMotorBackward = 4;
-//LED Robot Lk
+//LED Robot Lkk
 const int ForwardLED = 8;
 const int BackwardLED = 9;
 const int LeftLED = 11;
