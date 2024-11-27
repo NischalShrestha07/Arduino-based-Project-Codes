@@ -3,6 +3,7 @@
 // Define ultrasonic sensor pins
 const int trigPin = 9;
 const int echoPin = 8;
+//
 
 // Define servo motor
 Servo dustbinLid;  
