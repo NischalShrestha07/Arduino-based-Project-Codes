@@ -1,0 +1,74 @@
+// Created by Simple Circuits 
+
+#include <Wire.h> 
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h> 
+
+LiquidCrystal_I2C lcd(0x27,16,2);   
+
+Servo myservo;
+
+// Ultrasonic sensor pins
+const int trigPin = 2;
+const int echoPin = 3;
+
+int Slot = 4;  // Total number of parking slots
+int distanceThreshold = 10; // Distance threshold for detecting a vehicle (in cm)
+
+void setup() {
+  Serial.begin(9600); 
+
+  lcd.init(); // Initialize the LCD
+  lcd.backlight(); // Turn on the backlight
+
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  myservo.attach(4);
+  myservo.write(100);
+
+  lcd.setCursor(0,0);
+  lcd.print("     ARDUINO    ");
+  lcd.setCursor(0,1);
+  lcd.print(" PARKING SYSTEM ");
+  delay(2000);
+  lcd.clear();  
+}
+
+void loop() { 
+  int distance = getUltrasonicDistance();
+
+  if (distance > 0 && distance < distanceThreshold) { // If a vehicle is detected
+    if (Slot > 0) {
+      myservo.write(0);  // Open the gate
+      Slot--;  
+      delay(3000);
+      myservo.write(100); // Close the gate after delay
+    } else {
+      lcd.setCursor(0,0);
+      lcd.print("    SORRY :(    ");  
+      lcd.setCursor(0,1);
+      lcd.print("  Parking Full  "); 
+      delay(3000);
+      lcd.clear(); 
+    }
+  }
+
+  lcd.setCursor(0,0);
+  lcd.print("    WELCOME!    ");
+  lcd.setCursor(0,1);
+  lcd.print("Slot Left: ");
+  lcd.print(Slot);
+}
+
+int getUltrasonicDistance() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  
+  long duration = pulseIn(echoPin, HIGH);
+  int distance = duration * 0.034 / 2; // Convert time to distance in cm
+  return distance;
+}
