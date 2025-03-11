@@ -1,0 +1,83 @@
+#define IN1 14
+#define IN2 27
+#define IN3 26
+#define IN4 25
+
+bool isMovingForward = false; // Flag to keep forward running
+
+void setup() {
+  Serial.begin(115200); // Debug serial
+  Serial2.begin(9600, SERIAL_8N1, 16, 17); // VC02 on GPIO16 (TX), GPIO17 (optional)
+
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+}
+
+void loop() {
+  if (Serial2.available()) {
+    byte data = Serial2.read();
+    Serial.print("Command: ");
+    Serial.println(data, HEX);
+
+    if (data == 0x00) {
+      // Move Forward (continuous)
+      isMovingForward = true;
+      digitalWrite(IN1, HIGH);
+      digitalWrite(IN2, LOW);
+      digitalWrite(IN3, HIGH);
+      digitalWrite(IN4, LOW);
+    }
+    else if (data == 0x10) {
+      // Move Backward for 2 seconds
+      isMovingForward = false;
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, HIGH);
+      digitalWrite(IN3, LOW);
+      digitalWrite(IN4, HIGH);
+      delay(2000);
+      stopMotors();
+    }
+    else if (data == 0x12) {
+      // Turn Left
+      isMovingForward = false;
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, LOW);
+      digitalWrite(IN3, HIGH);
+      digitalWrite(IN4, LOW);
+      delay(1000);
+      stopMotors();
+    }
+    else if (data == 0x11) {
+      // Turn Right
+      isMovingForward = false;
+      digitalWrite(IN1, HIGH);
+      digitalWrite(IN2, LOW);
+      digitalWrite(IN3, LOW);
+      digitalWrite(IN4, LOW);
+      delay(1000);
+      stopMotors();
+    }
+    else if (data == 0x01) {
+      // Stop command
+      isMovingForward = false;
+      stopMotors();
+    }
+  }
+
+  // Optional: If forward flag is ON, keep motors ON
+  if (isMovingForward) {
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    digitalWrite(IN3, HIGH);
+    digitalWrite(IN4, LOW);
+  }
+}
+
+void stopMotors() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4,LOW);
+}
