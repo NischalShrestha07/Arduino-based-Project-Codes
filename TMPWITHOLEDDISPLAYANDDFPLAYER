@@ -1,0 +1,76 @@
+#include <WiFi.h>
+#include <DFRobotDFPlayerMini.h>
+#include <HardwareSerial.h>
+#include <DHT.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+// Define OLED Display settings
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Define Sensor Type and Pin
+#define DHTPIN 4
+#define DHTTYPE DHT11  // Change to DHT22 if needed
+DHT dht(DHTPIN, DHTTYPE);
+
+// Initialize DFPlayer
+HardwareSerial mySerial(1);
+DFRobotDFPlayerMini dfPlayer;
+
+void setup() {
+    Serial.begin(115200);
+    mySerial.begin(9600, SERIAL_8N1, 16, 17);  // RX=16, TX=17 for DFPlayer
+
+    dht.begin();
+
+    // Initialize DFPlayer
+    if (!dfPlayer.begin(mySerial)) {
+        Serial.println("DFPlayer initialization failed!");
+        while (true);
+    }
+    dfPlayer.volume(20);  // Set volume (0-30)
+
+    // Initialize OLED display
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        Serial.println("SSD1306 initialization failed!");
+        while (true);
+    }
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    Serial.println("Setup Complete");
+}
+
+void loop() {
+    float temperature = dht.readTemperature();
+
+    if (isnan(temperature)) {
+        Serial.println("Failed to read from DHT sensor!");
+        return;
+    }
+
+    Serial.print("Temperature: ");
+    Serial.print(temperature);
+    Serial.println("°C");
+
+    // Display temperature on OLED
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("Temp: ");
+    display.print(temperature);
+    display.println(" C");
+
+    if (temperature > 35.0) {
+        Serial.println("High Temperature Alert!");
+        dfPlayer.play(1);  // Play "high temperature" MP3 file from SD card
+        display.setCursor(0, 20);
+        display.println("ALERT: High Temp!");
+    }
+    
+    display.display();
+    delay(8000);  // Wait 8 seconds before next reading
+}
