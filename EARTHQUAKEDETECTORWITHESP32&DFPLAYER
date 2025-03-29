@@ -1,0 +1,84 @@
+#include <Wire.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <SoftwareSerial.h>
+#include <DFRobotDFPlayerMini.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+Adafruit_MPU6050 mpu;
+SoftwareSerial mySoftwareSerial(16, 17); // DFPlayer Mini TX, RX
+DFRobotDFPlayerMini myDFPlayer;
+
+#define SHAKE_THRESHOLD 10.0  // Adjust sensitivity
+
+void setup() {
+    Serial.begin(115200);
+    mySoftwareSerial.begin(9600);
+
+    // Initialize MPU6050
+    if (!mpu.begin()) {
+        Serial.println("MPU6050 not found!");
+        while (1);
+    }
+
+    // Initialize DFPlayer Mini
+    if (!myDFPlayer.begin(mySoftwareSerial)) {
+        Serial.println("DFPlayer Mini not found!");
+        while (1);
+    }
+    myDFPlayer.volume(20); // Set volume (0-30)
+
+    // Initialize OLED Display
+    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        Serial.println("SSD1306 not found!");
+        while (1);
+    }
+    display.clearDisplay();
+    showNormalFace();
+}
+
+void loop() {
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+
+    float accelMagnitude = sqrt(a.acceleration.x * a.acceleration.x + 
+                                a.acceleration.y * a.acceleration.y + 
+                                a.acceleration.z * a.acceleration.z);
+
+    Serial.println(accelMagnitude);
+
+    if (accelMagnitude > SHAKE_THRESHOLD) {
+        Serial.println("Earthquake Detected! Playing Alarm...");
+        myDFPlayer.play(1);  // Play alarm sound
+        showShockFace();
+        delay(5000);         // Delay to prevent continuous triggering
+    } else {
+        showNormalFace();
+    }
+
+    delay(200);
+}
+
+void showNormalFace() {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(40, 1);
+    display.println("NXTinnovations");
+    display.display();
+}
+
+void showShockFace() {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setCursor(40, 1);
+    display.println("                          Earthquakedetected!");
+    display.display();
+}
