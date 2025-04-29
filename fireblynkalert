@@ -12,16 +12,19 @@ char pass[] = "welcome98193";  // type your wifi password
 BlynkTimer timer;
 int flag = 0;
 const int buzzerPin = D2;  // Buzzer connected to D2
+const int relayPin = D3;   // Relay connected to D3
 
 void sendSensor() {
   int isButtonPressed = digitalRead(D1);
-  if (isButtonPressed == 0 && flag == 0) {
+  if (isButtonPressed == 0 && flag == 0) {QQ222222222222222222222222
     Serial.println("Fire in the House");
     digitalWrite(buzzerPin, HIGH);  // Turn on buzzer
+    digitalWrite(relayPin, HIGH);   // Turn on relay
     Blynk.logEvent("fire_alert", "Fire Detected");  // Triggers SMS if configured in Blynk
     flag = 1;
   } else if (isButtonPressed == 1) {
-    digitalWrite(buzzerPin, LOW);  // Turn off buzzer
+    digitalWrite(buzzerPin, LOW);   // Turn off buzzer
+    digitalWrite(relayPin, LOW);    // Turn off relay
     flag = 0;
   }
 }
@@ -29,7 +32,9 @@ void sendSensor() {
 void setup() {
   pinMode(D1, INPUT);  // Fire sensor input
   pinMode(buzzerPin, OUTPUT);  // Buzzer output
+  pinMode(relayPin, OUTPUT);   // Relay output
   digitalWrite(buzzerPin, LOW);  // Ensure buzzer is off initially
+  digitalWrite(relayPin, LOW);   // Ensure relay is off initially
   Serial.begin(115200);
   Blynk.begin(auth, ssid, pass);
   timer.setInterval(5000L, sendSensor);  // Check sensor every 5 seconds
