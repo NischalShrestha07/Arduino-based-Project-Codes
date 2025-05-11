@@ -1,0 +1,78 @@
+#include <SoftwareSerial.h>
+#include <DFRobotDFPlayerMini.h>
+
+SoftwareSerial mySerial(D7, D8); // RX, TX for DFPlayer
+DFRobotDFPlayerMini myDFPlayer;
+
+// Define buttons
+const int button1 = D1; // Play message 1: "Give me food"
+const int button2 = D2; // Play message 2: "I want to go toilet"
+const int button3 = D3; // Play message 3: "I am thirsty"
+const int button4 = D4; // Play message 4: "I feel pain"
+const int button5 = D5; // Play message 5: "Thank you"
+const int button6 = D6; // Play message 6: "Call my family"
+
+// Output pins (LEDs or relays)
+const int output1 = D0;  // Controlled by button3 (e.g., water relay/LED)
+const int output2 = D9;  // Controlled by button4 (e.g., emergency help)
+
+void setup() {
+  Serial.begin(9600);
+  mySerial.begin(9600);
+
+  pinMode(button1, INPUT_PULLUP);
+  pinMode(button2, INPUT_PULLUP);
+  pinMode(button3, INPUT_PULLUP);
+  pinMode(button4, INPUT_PULLUP);
+  pinMode(button5, INPUT_PULLUP);
+  pinMode(button6, INPUT_PULLUP);
+
+  pinMode(output1, OUTPUT);
+  pinMode(output2, OUTPUT);
+
+  digitalWrite(output1, LOW);
+  digitalWrite(output2, LOW);
+
+  if (!myDFPlayer.begin(mySerial)) {
+    Serial.println("DFPlayer not found!");
+    while (true);
+  }
+
+  myDFPlayer.volume(25);  // Set volume (0 to 30)
+}
+
+void loop() {
+  if (digitalRead(button1) == LOW) {
+    myDFPlayer.play(1); // "Give me food"
+    delay(1000);
+  }
+
+  if (digitalRead(button2) == LOW) {
+    myDFPlayer.play(2); // "I want to go toilet"
+    delay(1000);
+  }
+
+  if (digitalRead(button3) == LOW) {
+    myDFPlayer.play(3); // "I am thirsty"
+    digitalWrite(output1, HIGH); // Turn ON output1
+    delay(3000); // Keep it ON for 3 seconds
+    digitalWrite(output1, LOW);
+  }
+
+  if (digitalRead(button4) == LOW) {
+    myDFPlayer.play(4); // "I feel pain"
+    digitalWrite(output2, HIGH); // Turn ON output2 (e.g., call for help)
+    delay(3000); // Keep it ON for 3 seconds
+    digitalWrite(output2, LOW);
+  }
+
+  if (digitalRead(button5) == LOW) {
+    myDFPlayer.play(5); // "Thank you"
+    delay(1000);
+  }
+
+  if (digitalRead(button6) == LOW) {
+    myDFPlayer.play(6); // "Call my family"
+    delay(1000);
+  }
+}              
