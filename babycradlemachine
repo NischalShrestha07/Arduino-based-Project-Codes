@@ -1,0 +1,145 @@
+#include <Servo.h>
+#include <SoftwareSerial.h>
+#include <DFRobotDFPlayerMini.h>
+#include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>
+#include <ArduinoJson.h>
+
+// WiFi and Telegram settings
+#define WIFI_SSID "shrestha@vianet"           // Replace with your WiFi SSID
+#define WIFI_PASSWORD "welcome98193"   // Replace with your WiFi password
+#define BOT_TOKEN "7974099559:AAEo9tP0CwAkHXmlcSBSKI6ljGM00fDmZ98"           // Replace with your Telegram bot token
+#define CHAT_ID "7685110912"               // Replace with your Telegram chat ID
+#define CITY_NAME "brt-7"                   // Replace with your city name
+
+// Pin definitions for ESP8266 (NodeMCU)
+#define SENSOR_PIN D5          // NPN proximity sensor pin (GPIO 14)
+#define MOISTURE_SENSOR_PIN A0 // Moisture sensor pin (Analog A0, renamed from SOIL_MOISTURE_PIN)
+#define TAP_SERVO_PIN D6       // Tap servo motor pin (GPIO 12)
+#define WEIGHT_SERVO_PIN D0    // Weight servo motor pin (GPIO 16)
+#define DFPLAYER_RX D8         // DFPlayer RX pin (GPIO 13, connect via 1kΩ resistor)
+#define DFPLAYER_TX D7         // DFPlayer TX pin (GPIO 15)
+
+// Servo objects
+Servo tap_servo;        // Declare tap servo object
+Servo weight_servo;     // Declare weight servo object
+
+// SoftwareSerial for DFPlayer Mini
+SoftwareSerial dfSerial(DFPLAYER_RX, DFPLAYER_TX); // RX, TX
+
+// DFPlayer Mini object
+DFRobotDFPlayerMini dfPlayer;
+
+// Telegram bot client
+WiFiClientSecure client;
+UniversalTelegramBot bot(BOT_TOKEN, client);
+
+// Variables
+int proximity_val;         // Proximity sensor reading
+int prev_proximity_val = HIGH; // Previous proximity sensor state
+int moisture;              // Moisture sensor reading
+int prev_moisture = -1;    // Previous moisture sensor state
+const int WET_THRESHOLD = 700; // Moisture threshold (adjust based on sensor calibration)
+
+void setup() {
+  // Initialize serial for debugging
+  Serial.begin(9600);
+  delay(500);
+  Serial.println("Starting setup...");
+
+  // Connect to WiFi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  client.setInsecure(); // For simplicity; use proper certificates in production
+  Serial.print("Connecting to WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected! IP: " + WiFi.localIP().toString());
+
+  // Initialize pins
+  pinMode(SENSOR_PIN, INPUT); // NPN proximity sensor
+  pinMode(MOISTURE_SENSOR_PIN, INPUT); // Moisture sensor
+  tap_servo.attach(TAP_SERVO_PIN); // Attach tap servo
+  weight_servo.attach(WEIGHT_SERVO_PIN); // Attach weight servo
+  tap_servo.write(0); // Initialize tap servo at 0 degrees
+  weight_servo.write(0); // Initialize weight servo at 0 degrees
+
+  // Initialize DFPlayer
+  dfSerial.begin(9600);
+  delay(500);
+  Serial.println("Initializing DFPlayer...");
+  if (!dfPlayer.begin(dfSerial)) {
+    Serial.println("ERROR: DFPlayer failed!");
+    Serial.println("CHECK:");
+    Serial.println("1. Wiring: VCC=5V, GND=common, RX=D7 (via 1kΩ), TX=D8");
+    Serial.println("2. SD Card: FAT32, 0001.mp3 and 0002.mp3 in root, <=32GB");
+    Serial.println("3. Speaker: 8Ω on SPK_1/SPK_2");
+    while (true); // Halt if DFPlayer fails
+  }
+  Serial.println("DFPlayer initialized!");
+
+  // Configure DFPlayer
+  dfPlayer.volume(25); // Set volume (0-30, adjust as needed)
+  dfPlayer.outputDevice(DFPLAYER_DEVICE_SD);
+  Serial.println("DFPlayer ready: Volume=25, Device=SD");
+
+  // Test playback for both audio files
+  Serial.println("Testing 0001.mp3...");
+  dfPlayer.play(1); // Play 0001.mp3
+  delay(4000); // Wait for playback
+  Serial.println("Testing 0002.mp3...");
+  dfPlayer.play(2); // Play 0002.mp3
+  delay(4000); // Wait for playback
+  Serial.println("Test playback completed.");
+
+  // Send Telegram startup message
+  String startupMessage = "Smart Dustbin initialized in " + String(CITY_NAME) + "!";
+  bot.sendMessage(CHAT_ID, startupMessage, "");
+}
+
+void loop() {
+  // Read proximity sensor
+  proximity_val = digitalRead(SENSOR_PIN);
+  if (proximity_val != prev_proximity_val) {
+    if (proximity_val == LOW) { // Metal detected (NPN sensor pulls low)
+      Serial.println("Metal detected! Tap servo to 180°, playing 0001.mp3...");
+      tap_servo.write(180); // Rotate tap servo
+      dfPlayer.play(1); // Play 0001.mp3
+      String message = "Metal detected in my smart dustbin in " + String(CITY_NAME);
+      bot.sendMessage(CHAT_ID, message, ""); // Send Telegram alert
+      delay(4000); // Allow audio to play
+    } else { // No metal
+      Serial.println("No metal. Tap servo to 0°, pausing audio...");
+      tap_servo.write(0); // Reset tap servo
+      dfPlayer.pause(); // Pause audio
+      delay(1000); // Short delay
+    }
+    prev_proximity_val = proximity_val; // Update previous state
+  }
+
+  // Read moisture sensor
+  moisture = analogRead(MOISTURE_SENSOR_PIN);
+  // Check if moisture crosses the wet threshold
+  if ((prev_moisture == -1) || // Initial reading
+      (prev_moisture < WET_THRESHOLD && moisture >= WET_THRESHOLD) || // Became wet
+      (prev_moisture >= WET_THRESHOLD && moisture < WET_THRESHOLD)) { // Became dry
+    if (moisture >= WET_THRESHOLD) { // Wet waste detected
+      Serial.println("Wet waste detected! Weight servo to 180°, playing 0002.mp3...");
+      weight_servo.write(180); // Rotate weight servo
+      dfPlayer.play(2); // Play 0002.mp3
+      String message = "Wet waste detected in my smart dustbin in " + String(CITY_NAME);
+      bot.sendMessage(CHAT_ID, message, ""); // Send Telegram alert
+      delay(4000); // Allow audio to play
+    } else { // Dry condition
+      Serial.println("Dry condition. Weight servo to 0°, pausing audio...");
+      weight_servo.write(0); // Reset weight servo
+      dfPlayer.pause(); // Pause audio
+      delay(1000); // Short delay
+    }
+    prev_moisture = moisture; // Update previous state
+  }
+
+  delay(100); // Small delay to avoid excessive looping
+}
