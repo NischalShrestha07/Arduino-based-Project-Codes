@@ -1,0 +1,78 @@
+#include <Servo.h>
+#include <SoftwareSerial.h>
+#include <DFRobotDFPlayerMini.h>
+
+// Pin definitions for ESP8266 (NodeMCU)
+#define SENSOR_PIN D5      // NPN proximity sensor pin (GPIO 14)
+#define TAP_SERVO_PIN D6   // Servo motor pin (GPIO 12)
+#define DFPLAYER_RX D8     // DFPlayer RX pin (GPIO 13, connect via 1kΩ resistor)
+#define DFPLAYER_TX D7     // DFPlayer TX pin (GPIO 15)
+
+// Servo object
+Servo tap_servo;
+
+// SoftwareSerial for DFPlayer Mini
+SoftwareSerial dfSerial(DFPLAYER_RX, DFPLAYER_TX); // RX, TX
+
+// DFPlayer Mini object
+DFRobotDFPlayerMini dfPlayer;
+
+// Variables
+int val;                   // Sensor reading
+int prev_val = HIGH;       // Previous sensor state to detect changes
+
+void setup() {
+  // Initialize serial
+  Serial.begin(9600); // Match working sketch
+  delay(500);
+  Serial.println("Starting setup...");
+
+  // Initialize pins
+  pinMode(SENSOR_PIN, INPUT); // No pull-up, assuming NPN sensor handles it
+  tap_servo.attach(TAP_SERVO_PIN);
+  tap_servo.write(0); // Start at 0 degrees
+
+  // Initialize DFPlayer
+  dfSerial.begin(9600);
+  delay(500);
+  Serial.println("Initializing DFPlayer...");
+  if (!dfPlayer.begin(dfSerial)) {
+    Serial.println("ERROR: DFPlayer failed!");
+    Serial.println("CHECK:");
+    Serial.println("1. Wiring: VCC=5V, GND=common, RX=D7 (via 1kΩ), TX=D8");
+    Serial.println("2. SD Card: FAT32, 0001.mp3 in root, <=32GB");
+    Serial.println("3. Speaker: 8Ω on SPK_1/SPK_2");
+    while (true);
+  }
+  Serial.println("DFPlayer initialized!");
+
+  // Configure DFPlayer
+  dfPlayer.volume(25); // Match working sketch
+  dfPlayer.outputDevice(DFPLAYER_DEVICE_SD);
+  Serial.println("DFPlayer ready: Volume=25, Device=SD");
+
+  // Test playback
+  Serial.println("Testing 0001.mp3...");
+  dfPlayer.play(1); // Play 0001.mp3 in root
+  delay(4000);
+  Serial.println("Test playback sent.");
+}
+
+void loop() {
+  val = digitalRead(SENSOR_PIN);
+  if (val != prev_val) {
+    if (val == LOW) { // Metal detected (NPN sensor pulls low)
+      Serial.println("Metal detected! Servo to 180°, playing 0001.mp3...");
+      tap_servo.write(180);
+      dfPlayer.play(1); // Play 0001.mp3 in root
+      delay(4000); // Match working sketch
+    } else { // No metal
+      Serial.println("No metal. Servo to 0°, pausing...");
+      tap_servo.write(0);
+      dfPlayer.pause();
+      delay(1000);
+    }
+    prev_val = val;
+  }
+  delay(100);
+}
