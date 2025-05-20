@@ -1,0 +1,190 @@
+#include <Servo.h>
+#include <SoftwareSerial.h>
+#include <DFRobotDFPlayerMini.h>
+#include <ESP8266WiFi.h>
+#include <UniversalTelegramBot.h>
+
+// Pin definitions
+#define SENSOR_PIN A0            // Analog pin for soil moisture sensor (with microphone)
+#define SERVO_PIN D6             // GPIO12
+#define LED_PIN D4               // GPIO2
+
+// DFPlayer pins
+SoftwareSerial mySoftwareSerial(D7, D8);  // D7 = RX, D8 = TX
+
+// WiFi Credentials
+const char* ssid = "shrestha@vianet";
+const char* password = "welcome98193";
+
+// Telegram Bot Credentials
+#define BOTtoken "7974099559:AAEo9tP0CwAkHXmlcSBSKI6ljGM00fDmZ98"
+#define CHAT_ID "7685110912"
+
+// Initialize objects
+Servo cradleServo;
+DFRobotDFPlayerMini myDFPlayer;
+WiFiClientSecure client;
+UniversalTelegramBot bot(BOTtoken, client);
+
+// State variables
+bool isCrying = false;
+unsigned long lastCryTime = 0;
+const unsigned long cryCooldown = 15000; // 15 seconds between cries
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 100; // 100ms debounce delay for stability
+const int soundThreshold = 230;          // Adjust based on sensor output (0-1023)
+
+void connectToWiFi() {
+  Serial.print("Connecting to WiFi...");
+  WiFi.begin(ssid, password);
+  
+  int retries = 0;
+  while (WiFi.status() != WL_CONNECTED && retries < 20) {
+    delay(500);
+    Serial.print(".");
+    retries++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi Connected!");
+  } else {
+    Serial.println("\nFailed to connect! Restarting...");
+    ESP.restart();
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  mySoftwareSerial.begin(9600);
+
+  // Initialize pins
+  pinMode(SENSOR_PIN, INPUT);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
+  // Initialize servo
+  cradleServo.attach(SERVO_PIN);
+  cradleServo.write(90); // Neutral/stop position
+
+  // Initialize DFPlayer
+  if (!myDFPlayer.begin(mySoftwareSerial)) {
+    Serial.println("Unable to begin DFPlayer Mini");
+    while (true);
+  }
+  myDFPlayer.volume(25); // Volume range: 0 - 30
+
+  // Initialize WiFi
+  connectToWiFi();
+  client.setInsecure();  // Allows HTTP without SSL verification
+
+  // Send device activation message
+  if (bot.sendMessage(CHAT_ID, "✅ Baby Cradle Device Activated and Ready!", "")) {
+    Serial.println("Activation message sent!");
+  } else {
+    Serial.println("❌ Failed to send activation message!");
+  }
+
+  Serial.println("Smart Baby Cradle Initialized");
+}
+
+void loop() {
+  // Check WiFi connection
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi Disconnected! Reconnecting...");
+    connectToWiFi();
+  }
+
+  // Read sensor value
+  int sensorValue = analogRead(SENSOR_PIN);
+  Serial.print("Sensor value: ");
+  Serial.println(sensorValue); // Debug sensor state
+
+  // Debounce logic
+  static int lastSensorState = 0;
+  bool soundDetected = false;
+
+  // Detect significant change
+  if (abs(sensorValue - lastSensorState) > 50) { // Allow small fluctuations
+    lastDebounceTime = millis();
+  }
+
+  // Check if state is stable
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // Note: Assuming higher values mean sound detected. If lower values indicate sound, change to sensorValue < soundThreshold
+    if (sensorValue > soundThreshold) {
+      soundDetected = true;
+    }
+  }
+
+  lastSensorState = sensorValue;
+
+  // Activate only when sound is detected and cooldown has passed
+  if (soundDetected && !isCrying && (millis() - lastCryTime > cryCooldown)) {
+    isCrying = true;
+    lastCryTime = millis();
+    Serial.println("Sound detected! Activating cradle and audio...");
+
+    digitalWrite(LED_PIN, HIGH);  // Turn on LED
+
+    // Play 0001.mp3
+    myDFPlayer.play(1);
+    Serial.println("Playing track: 0001.mp3");
+
+    // Rock the cradle
+    rockCradle();
+
+    // Send Telegram alert
+    String message = "🚨 Baby is crying!\n📅 Date: " + getDateTime() + "\n🎵 Playing lullaby (0001.mp3)\n🛏 Cradle rocking";
+    if (bot.sendMessage(CHAT_ID, message, "")) {
+      Serial.println("📩 Telegram message sent successfully!");
+    } else {
+      Serial.println("❌ Failed to send Telegram message!");
+    }
+  }
+
+  // Reset after cooldown
+  if (isCrying && (millis() - lastCryTime > cryCooldown)) {
+    isCrying = false;
+    cradleServo.write(90);       // Stop cradle
+    digitalWrite(LED_PIN, LOW);  // Turn off LED
+    Serial.println("Cradle stopped, system reset.");
+  }
+}
+
+void rockCradle() {
+  for (int i = 0; i < 5; i++) {
+    cradleServo.write(60);  // Move to one side
+    delay(500);
+    cradleServo.write(120); // Move to other side
+    delay(500);
+  }
+  cradleServo.write(90); // Back to neutral
+}
+
+String getDateTime() {
+  // Fallback: Use approximate time, adjusted for Nepal (UTC+5:45)
+  unsigned long secondsSinceBoot = millis() / 1000;
+  secondsSinceBoot += (5 * 3600 + 45 * 60); // Add 5h45m
+  int hour = (secondsSinceBoot / 3600) % 24;
+  int minute = (secondsSinceBoot / 60) % 60;
+  int second = secondsSinceBoot % 60;
+  int year = 2025; // Current date
+  int month = 5;
+  int day = 7;
+
+  String dateStr = String(year) + "/";
+  if (month < 10) dateStr += "0";
+  dateStr += String(month) + "/";
+  if (day < 10) dateStr += "0";
+  dateStr += String(day);
+
+  String timeStr = "";
+  if (hour < 10) timeStr += "0";
+  timeStr += String(hour) + ":";
+  if (minute < 10) timeStr += "0";
+  timeStr += String(minute) + ":";
+  if (second < 10) timeStr += "0";
+  timeStr += String(second);
+
+  return dateStr + " " + timeStr;
+}
