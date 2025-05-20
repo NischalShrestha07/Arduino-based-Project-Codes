@@ -1,0 +1,77 @@
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+
+// Slave Node's MAC Address (replace with actual MAC from slave)
+uint8_t slaveMacAddress[] = {0x5C, 0xCF, 0x7F, 0x60, 0xF5, 0x75};
+
+// Sensor pins
+#define FLAME_SENSOR_PIN D5 // GPIO 14 for flame sensor
+#define VIBRATION_SENSOR_PIN D6 // GPIO 12 for vibration sensor (e.g., SW-420)
+
+// State variables to prevent repeated messages
+bool fireDetected = false;
+bool earthquakeDetected = false;
+
+// Callback to confirm message delivery
+void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
+  Serial.print("Message Delivery: ");
+  Serial.println(sendStatus == 0 ? "Success" : "Failed");
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(FLAME_SENSOR_PIN, INPUT_PULLUP); // Flame sensor with pull-up
+  pinMode(VIBRATION_SENSOR_PIN, INPUT); // Vibration sensor
+
+  // Initialize WiFi in Station mode
+  WiFi.mode(WIFI_STA);
+  Serial.println("Master Node MAC: " + WiFi.macAddress());
+
+  // Initialize ESP-NOW
+  if (esp_now_init() != 0) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+
+  // Set role and register callback
+  esp_now_set_self_role(ESP_NOW_ROLE_CONTROLLER);
+  esp_now_register_send_cb(OnDataSent);
+
+  // Add slave as peer
+  esp_now_add_peer(slaveMacAddress, ESP_NOW_ROLE_SLAVE, 1, NULL, 0);
+  Serial.println("ESP-NOW initialized, peer added");
+}
+
+void loop() {
+  // Read sensors
+  bool currentFireState = digitalRead(FLAME_SENSOR_PIN) == LOW; // LOW = fire detected
+  bool currentVibrationState = digitalRead(VIBRATION_SENSOR_PIN) == HIGH; // HIGH = earthquake detected
+
+  // Handle fire detection
+  if (currentFireState && !fireDetected) {
+    Serial.println("Fire Detected!");
+    char message[] = "Fire Detected";
+    esp_now_send(slaveMacAddress, (uint8_t *)message, strlen(message));
+    fireDetected = true;
+  } else if (!currentFireState && fireDetected) {
+    Serial.println("No Fire");
+    char message[] = "No Fire";
+    esp_now_send(slaveMacAddress, (uint8_t *)message, strlen(message));
+    fireDetected = false;
+  }
+
+  // Handle earthquake detection
+  if (currentVibrationState && !earthquakeDetected) {
+    Serial.println("Earthquake Detected!");
+    char message[] = "Earthquake";
+    esp_now_send(slaveMacAddress, (uint8_t *)message, strlen(message));
+    earthquakeDetected = true;
+  } else if (!currentVibrationState && earthquakeDetected) {
+    Serial.println("No Earthquake");
+    char message[] = "No Earthquake";
+    esp_now_send(slaveMacAddress, (uint8_t *)message, strlen(message));
+    earthquakeDetected = false;
+  }
+
+  delay(1000); // Check every second
+}
