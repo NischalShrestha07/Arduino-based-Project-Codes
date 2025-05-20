@@ -1,0 +1,134 @@
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+
+// L298N motor driver pins
+#define IN1 D1  // Motor driver input 1
+#define IN2 D2  // Motor driver input 2
+#define ENA D3  // PWM pin for speed control
+#define BUTTON_PIN D5  // Push button pin
+
+// Authorized UIDs (must match master node)
+const char* authorizedUIDs[] = {"B3BFA1A7", "04D5E6F7"};
+const int authorizedCount = 2;
+
+// Button state variables
+int lastButtonState = HIGH; // Assume HIGH (not pressed) with internal pull-up
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50; // Debounce time in ms
+
+// Callback for received data
+void onReceive(uint8_t *mac, uint8_t *data, uint8_t len) {
+  Serial.println("Slave Node: Entering onReceive");
+  Serial.print("Slave Node: Data Received, Length: ");
+  Serial.println(len);
+
+  // Check for valid data length
+  if (len != 9) { // Expect 8 chars + null
+    Serial.println("Slave Node: Invalid Data Length");
+    return;
+  }
+
+  // Copy received data to fixed-size buffer
+  char receivedUID[9];
+  memcpy(receivedUID, data, 8);
+  receivedUID[8] = '\0'; // Null-terminate
+  Serial.print("Slave Node: Received UID: ");
+  Serial.println(receivedUID);
+
+  // Check if UID is authorized
+  bool authorized = false;
+  for (int i = 0; i < authorizedCount; i++) {
+    if (strcmp(receivedUID, authorizedUIDs[i]) == 0) {
+      authorized = true;
+      break;
+    }
+  }
+
+  if (authorized) {
+    Serial.println("Slave Node: Access Granted");
+    
+    // Rotate clockwise
+    Serial.println("Slave Node: Starting Clockwise Rotation");
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    analogWrite(ENA, 255); // Full speed
+    Serial.println("Slave Node: Motor Rotating Clockwise");
+    delay(2000); // Rotate for 2 seconds
+    Serial.println("Slave Node: Clockwise Rotation Complete");
+
+    // Stop motor
+    Serial.println("Slave Node: Stopping Motor");
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, LOW);
+    analogWrite(ENA, 0);
+    Serial.println("Slave Node: Motor Stopped");
+  } else {
+    Serial.println("Slave Node: Access Denied");
+  }
+  Serial.println("Slave Node: Exiting onReceive");
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000); // Allow Serial to stabilize
+  Serial.println("Slave Node: Starting...");
+
+  // Initialize L298N pins
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  analogWrite(ENA, 0); // Ensure motor is stopped
+  Serial.println("Slave Node: L298N Motor Driver Initialized");
+
+  // Initialize push button pin
+  pinMode(BUTTON_PIN, INPUT_PULLUP); // Internal pull-up resistor
+  Serial.println("Slave Node: Push Button Initialized");
+
+  // Initialize ESP-NOW
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect(); // Clear WiFi state
+  delay(100);
+  Serial.println("Slave Node: WiFi MAC Address: " + WiFi.macAddress());
+  if (esp_now_init() != 0) {
+    Serial.println("Slave Node: ESP-NOW Init Failed");
+    while (1); // Halt if ESP-NOW fails
+  }
+  Serial.println("Slave Node: ESP-NOW Initialized");
+  esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
+  esp_now_register_recv_cb(onReceive);
+  Serial.println("Slave Node: Ready to Receive Data");
+}
+
+void loop() {
+  // Read button state
+  int buttonState = digitalRead(BUTTON_PIN);
+
+  // Check for button press with debouncing
+  if (buttonState != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    if (buttonState == LOW) { // Button pressed (LOW with pull-up)
+      Serial.println("Slave Node: Button Pressed - Starting Counterclockwise Rotation");
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, HIGH);
+      analogWrite(ENA, 255); // Full speed
+      Serial.println("Slave Node: Motor Rotating Counterclockwise");
+      delay(2000); // Rotate for 2 seconds
+      Serial.println("Slave Node: Counterclockwise Rotation Complete");
+
+      // Stop motor
+      Serial.println("Slave Node: Stopping Motor");
+      digitalWrite(IN1, LOW);
+      digitalWrite(IN2, LOW);
+      analogWrite(ENA, 0);
+      Serial.println("Slave Node: Motor Stopped");
+    }
+  }
+
+  lastButtonState = buttonState;
+  delay(10); // Small delay for loop stability
+}
