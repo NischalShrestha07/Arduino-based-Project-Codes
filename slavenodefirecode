@@ -1,0 +1,177 @@
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <SoftwareSerial.h>
+#include <DFRobotDFPlayerMini.h>
+
+// Initialize LCD (try 0x27 or 0x3F based on your module)
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Change to 0x3F if 0x27 doesn't work
+
+// Relay pin
+#define RELAY_PIN D6 // GPIO 12
+
+// DFPlayer Mini pins
+#define DFPLAYER_RX_PIN D7 // GPIO 13 (connect to DFPlayer TX)
+#define DFPLAYER_TX_PIN D8 // GPIO 15 (connect to DFPlayer RX via 1kΩ resistor)
+
+// Timeout for LCD message, relay, and audio
+unsigned long lastMessageTime = 0;
+const unsigned long MESSAGE_TIMEOUT = 5000; // 5 seconds timeout
+bool faultDisplayed = false;
+
+// Initialize SoftwareSerial and DFPlayer
+SoftwareSerial mySoftwareSerial(DFPLAYER_RX_PIN, DFPLAYER_TX_PIN);
+DFRobotDFPlayerMini myDFPlayer;
+
+// Callback for received ESP-NOW data
+void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len) {
+  char msg[32];
+  // Prevent buffer overflow
+  uint8_t safeLen = len < (sizeof(msg) - 1) ? len : (sizeof(msg) - 1);
+  memcpy(msg, incomingData, safeLen);
+  msg[safeLen] = '\0'; // Null-terminate
+
+  // Print to Serial for debugging
+  Serial.print("Received: ");
+  Serial.println(msg);
+
+  // Clear LCD
+  lcd.clear();
+  lcd.setCursor(0, 0);
+
+  // Handle message display (split if longer than 16 characters)
+  if (strlen(msg) > 16) {
+    char firstLine[17];
+    char secondLine[17];
+    strncpy(firstLine, msg, 16);
+    firstLine[16] = '\0';
+    strncpy(secondLine, msg + 16, 16);
+    secondLine[16] = '\0';
+    lcd.print(firstLine);
+    lcd.setCursor(0, 1);
+    lcd.print(secondLine);
+  } else {
+    lcd.print(msg);
+  }
+
+  // Control relay and DFPlayer based on message
+  if (strcmp(msg, "Fire Detected") == 0) {
+    digitalWrite(RELAY_PIN, HIGH); // Turn relay ON
+    Serial.println("Attempting to play 0001.mp3...");
+    myDFPlayer.play(1); // Play 0001.mp3 from root directory
+    Serial.println("Relay ON, Play command sent for 0001.mp3");
+    faultDisplayed = true;
+    lastMessageTime = millis();
+  } else if (strcmp(msg, "Earthquake") == 0) {
+    digitalWrite(RELAY_PIN, HIGH); // Turn relay ON
+    Serial.println("Relay ON");
+    faultDisplayed = true;
+    lastMessageTime = millis();
+  } else if (strcmp(msg, "No Fire") == 0 || strcmp(msg, "No Earthquake") == 0) {
+    digitalWrite(RELAY_PIN, LOW); // Turn relay OFF
+    myDFPlayer.stop(); // Stop audio
+    Serial.println("Relay OFF, Audio stopped");
+    faultDisplayed = false;
+    lastMessageTime = millis();
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  delay(500);
+  Serial.println("Starting setup...");
+
+  // Initialize relay pin
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW); // Relay OFF (active HIGH)
+
+  // Initialize I2C and LCD
+  Wire.begin(D1, D2); // SDA = D1 (GPIO 5), SCL = D2 (GPIO 4)
+  lcd.init();        // Initialize LCD
+  lcd.backlight();   // Turn on backlight
+  lcd.setCursor(0, 0);
+  lcd.print("Initializing..."); // Initial message
+  Serial.println("LCD and Relay initialized");
+
+  // Initialize DFPlayer
+  mySoftwareSerial.begin(9600);
+  delay(500);
+  Serial.println("Initializing DFPlayer...");
+  int retryCount = 0;
+  const int maxRetries = 3;
+  bool dfPlayerInitialized = false;
+  while (retryCount < maxRetries && !dfPlayerInitialized) {
+    if (myDFPlayer.begin(mySoftwareSerial)) {
+      dfPlayerInitialized = true;
+      Serial.println("DFPlayer initialized successfully!");
+    } else {
+      retryCount++;
+      Serial.print("DFPlayer init attempt ");
+      Serial.print(retryCount);
+      Serial.println(" failed. Retrying...");
+      delay(1000); // Wait before retry
+    }
+  }
+  if (!dfPlayerInitialized) {
+    Serial.println("ERROR: DFPlayer failed to initialize!");
+    Serial.println("CHECK:");
+    Serial.println("1. Wiring: VCC=5V, GND=common, RX=D7 (via 1kΩ), TX=D8");
+    Serial.println("2. SD Card: FAT32, 0001.mp3 in root directory, <=32GB");
+    Serial.println("3. Speaker: 8Ω on SPK_1/SPK_2");
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("DFPlayer Failed");
+    digitalWrite(RELAY_PIN, LOW);
+    while (true); // Halt if DFPlayer fails
+  }
+  myDFPlayer.volume(25); // Set volume (0-30, adjust as needed)
+  myDFPlayer.outputDevice(DFPLAYER_DEVICE_SD);
+  Serial.println("DFPlayer ready: Volume=25, Device=SD");
+
+  // Test DFPlayer playback
+  Serial.println("Testing 0001.mp3...");
+  myDFPlayer.play(1); // Play 0001.mp3 from root directory
+  delay(5000); // Wait 5 seconds for playback
+  myDFPlayer.stop(); // Stop playback
+  Serial.println("Test playback completed");
+
+  // Initialize WiFi in Station mode
+  WiFi.mode(WIFI_STA);
+  Serial.println("Slave Node MAC: " + WiFi.macAddress());
+
+  // Initialize ESP-NOW
+  if (esp_now_init() != 0) {
+    Serial.println("ESP-NOW init failed");
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("ESP-NOW Failed");
+    digitalWrite(RELAY_PIN, LOW);
+    myDFPlayer.stop();
+    while (true); // Halt if ESP-NOW fails
+  }
+
+  // Set role and register receive callback
+  esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
+  esp_now_register_recv_cb(OnDataRecv);
+  Serial.println("ESP-NOW initialized");
+
+  // Clear initial message after setup
+  delay(2000);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("No Fault");
+}
+
+void loop() {
+  // Check if fault message timeout has elapsed
+  if (faultDisplayed && (millis() - lastMessageTime >= MESSAGE_TIMEOUT)) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("No Fault");
+    digitalWrite(RELAY_PIN, LOW); // Turn relay OFF
+    myDFPlayer.stop(); // Stop audio
+    Serial.println("LCD reset to No Fault, Relay OFF, Audio stopped");
+  }
+  delay(100); // Small delay to prevent tight loop
+}
