@@ -1,0 +1,69 @@
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+#include <SPI.h>
+#include <MFRC522.h>
+
+// RC522 pins
+#define SS_PIN D8
+#define RST_PIN D3
+MFRC522 rfid(SS_PIN, RST_PIN);
+
+// Slave node MAC address (verified as correct)
+uint8_t slaveMac[] = {0x5C, 0xCF, 0x7F, 0x60, 0xF5, 0x75};
+
+// Callback for send status
+void onSent(uint8_t *mac_addr, uint8_t status) {
+  Serial.print("Master Node: Send Status: ");
+  Serial.println(status == 0 ? "Success" : "Failed");
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000); // Allow Serial to stabilize
+  Serial.println("Master Node: Starting...");
+
+  // Initialize SPI and RFID
+  SPI.begin();
+  rfid.PCD_Init();
+  Serial.print("Master Node: RFID Reader Version: ");
+  rfid.PCD_DumpVersionToSerial(); // Verify RC522 detection
+  Serial.println("Master Node: RFID Reader Initialized");
+
+  // Initialize ESP-NOW
+  WiFi.mode(WIFI_STA);
+  Serial.println("Master Node: WiFi MAC Address: " + WiFi.macAddress());
+  if (esp_now_init() != 0) {
+    Serial.println("Master Node: ESP-NOW Init Failed");
+    while (1); // Halt if ESP-NOW fails
+  }
+  Serial.println("Master Node: ESP-NOW Initialized");
+  esp_now_set_self_role(ESP_NOW_ROLE_CONTROLLER);
+  esp_now_register_send_cb(onSent);
+  esp_now_add_peer(slaveMac, ESP_NOW_ROLE_SLAVE, 1, NULL, 0);
+  Serial.println("Master Node: Peer Added");
+}
+
+void loop() {
+  if (rfid.PICC_IsNewCardPresent()) {
+    Serial.println("Master Node: Card Detected");
+    if (rfid.PICC_ReadCardSerial()) {
+      char uid[9]; // Fixed-size buffer for 4-byte UID (8 chars + null)
+      for (byte i = 0, j = 0; i < rfid.uid.size && j < 8; i++, j += 2) {
+        sprintf(&uid[j], "%02X", rfid.uid.uidByte[i]);
+      }
+      uid[8] = '\0'; // Null-terminate
+      Serial.print("Master Node: Card UID: ");
+      Serial.println(uid);
+
+      // Send UID to slave
+      esp_now_send(slaveMac, (uint8_t*)uid, 9); // Fixed 9 bytes
+      Serial.print("Master Node: UID Sent to Slave: ");
+      Serial.println(uid);
+      
+      rfid.PICC_HaltA(); // Halt communication with the card
+    } else {
+      Serial.println("Master Node: Failed to Read Card");
+    }
+  }
+  delay(1000); // Slower loop for debugging
+}
