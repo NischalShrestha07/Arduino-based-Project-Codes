@@ -1,0 +1,161 @@
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+
+// L298N Motor Driver Pins
+#define IN1 D5  // GPIO 14 (Right motor)
+#define IN2 D6  // GPIO 12 (Right motor)
+#define IN3 D7  // GPIO 13 (Left motor)
+#define IN4 D4  // GPIO 2  (Left motor)
+
+// Initialize global variables for movement commands
+bool front = false;
+bool back = false;
+bool left = false;
+bool right = false;
+
+// Struct to receive data (must match the master's struct)
+typedef struct {
+  bool f; // Front
+  bool b; // Back
+  bool l; // Left
+  bool r; // Right
+} message;
+
+message data;
+
+// Callback function to handle incoming data
+void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len) {
+  Serial.println("Data received!");
+  if (len == sizeof(message)) {
+    memcpy(&data, incomingData, sizeof(data));
+    front = data.f;
+    back = data.b;
+    left = data.l;
+    right = data.r;
+    Serial.print("Received - Front: ");
+    Serial.print(front);
+    Serial.print(", Back: ");
+    Serial.print(back);
+    Serial.print(", Left: ");
+    Serial.print(left);
+    Serial.print(", Right: ");
+    Serial.println(right);
+  } else {
+    Serial.println("Unexpected data length: " + String(len));
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("ESP-NOW Receiver Initialized");
+
+  // Initialize motor pins as OUTPUT
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  // Stop motors initially
+  carStop();
+
+  // Initialize WiFi in Station mode
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  Serial.println("WiFi Mode: STA");
+  Serial.println("Slave MAC Address: " + WiFi.macAddress());
+
+  // Initialize ESP-NOW
+  if (esp_now_init() != 0) {
+    Serial.println("Error initializing ESP-NOW");
+    ESP.restart();
+  }
+  Serial.println("ESP-NOW Initialized");
+
+  // Set role to slave
+  esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
+
+  // Register receive callback
+  esp_now_register_recv_cb(OnDataRecv);
+  Serial.println("Receive Callback Registered");
+}
+
+void loop() {
+  // Prioritize commands to avoid conflicts
+  if (front && !back && !left && !right) {
+    carForward();
+  } else if (back && !front && !left && !right) {
+    carBackward();
+  } else if (left && !front && !back && !right) {
+    carTurnLeft();
+  } else if (right && !front && !back && !left) {
+    carTurnRight();
+  } else {
+    carStop();
+  }
+
+  // Debug: Print current state periodically
+  static unsigned long lastDebug = 0;
+  if (millis() - lastDebug >= 1000) {
+    Serial.print("Current State - Front: ");
+    Serial.print(front);
+    Serial.print(", Back: ");
+    Serial.print(back);
+    Serial.print(", Left: ");
+    Serial.print(left);
+    Serial.print(", Right: ");
+    Serial.println(right);
+    lastDebug = millis();
+  }
+
+  delay(100);
+}
+
+// Motor control functions
+void carForward() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+  Serial.println("Car Moving Forward");
+}
+
+void carBackward() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+  Serial.println("Car Moving Backward");
+  // Debug: Confirm pin states
+  Serial.print("IN1: "); Serial.print(digitalRead(IN1));
+  Serial.print(", IN2: "); Serial.print(digitalRead(IN2));
+  Serial.print(", IN3: "); Serial.print(digitalRead(IN3));
+  Serial.print(", IN4: "); Serial.println(digitalRead(IN4));
+}
+
+void carTurnLeft() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);  // Right motor forward
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);   // Left motor forward
+  Serial.println("Car Turning Left");
+}
+
+void carTurnRight() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);   // Right motor forward
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);  // Left motor backward
+  Serial.println("Car Turning Right");
+}
+
+void carStop() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+  static unsigned long lastPrint = 0;
+  if (millis() - lastPrint >= 1000) {
+    Serial.println("Car Stopped");
+    lastPrint = millis();
+}
+}
