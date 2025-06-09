@@ -1,0 +1,201 @@
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
+#include <WiFiClientSecureBearSSL.h>
+#include <LiquidCrystal_I2C.h>
+
+#define RST_PIN  D3
+#define SS_PIN   D4
+#define BUZZER   D8
+
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+MFRC522::MIFARE_Key key;  
+MFRC522::StatusCode status;      
+
+int blockNum = 2;
+byte bufferLen = 18;
+byte readBlockData[18];
+
+String card_holder_name;
+const String sheet_url = "https://script.google.com/macros/s/AKfycbzxI3SBALPDSGMCSVYciy5sRgWaBvhaNcRXIaBA42goT__5K7X0qALTPGnO_ZS6y_yKWA/exec";
+
+#define WIFI_SSID "shrestha@vianet"
+#define WIFI_PASSWORD "welcome98193"
+
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Replace with your I2C address (e.g., 0x3F)
+
+void setup() {
+  Serial.begin(9600);
+  lcd.init(); // Initialize LCD
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("  Initializing  ");
+  Serial.println("LCD: Initializing");
+  for (int a = 5; a <= 10; a++) {
+    lcd.setCursor(a, 1);
+    lcd.print(".");
+    Serial.println("LCD: Printing dot " + String(a - 5));
+    delay(500);
+  }
+
+  Serial.println();
+  Serial.print("Connecting to AP");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(200);
+  }
+  Serial.println("");
+  Serial.println("WiFi connected.");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  Serial.println();
+
+  pinMode(BUZZER, OUTPUT);
+  SPI.begin();
+  mfrc522.PCD_Init();
+  Serial.println("MFRC522 initialized");
+}
+
+void loop() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(" Scan your Card ");
+  Serial.println("LCD: Scan your Card");
+
+  // Reset RFID reader state at the start of each loop
+  mfrc522.PCD_Init(); // Reinitialize to ensure clean state
+  mfrc522.PCD_StopCrypto1(); // Disable any existing crypto
+
+  // Check for a new card
+  if (!mfrc522.PICC_IsNewCardPresent()) {
+    delay(50); // Prevent rapid looping
+    return;
+  }
+  Serial.println("Card detected");
+  if (!mfrc522.PICC_ReadCardSerial()) {
+    Serial.println("Failed to read card serial");
+    delay(50);
+    mfrc522.PICC_HaltA();
+    mfrc522.PCD_StopCrypto1();
+    return;
+  }
+
+  Serial.println(F("Reading last data from RFID..."));
+  ReadDataFromBlock(blockNum, readBlockData);
+
+  Serial.print(F("Last data in RFID:"));
+  Serial.print(blockNum);
+  Serial.print(F(" --> "));
+  String cardData = "";
+  for (int j = 0; j < 16; j++) {
+    if (readBlockData[j] >= 32 && readBlockData[j] <= 126) {
+      cardData += (char)readBlockData[j];
+    }
+  }
+  Serial.println(cardData);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  if (cardData.length() > 0) {
+    lcd.print("Hey " + cardData.substring(0, cardData.length() > 12 ? 12 : cardData.length()));
+  } else {
+    lcd.print("No Data Found");
+  }
+  lcd.setCursor(0, 1);
+  lcd.print("Scanning...");
+  Serial.println("LCD: Hey " + cardData + ", Scanning...");
+  delay(5000);
+
+  digitalWrite(BUZZER, HIGH);
+  delay(200);
+  digitalWrite(BUZZER, LOW);
+  delay(200);
+  digitalWrite(BUZZER, HIGH);
+  delay(200);
+  digitalWrite(BUZZER, LOW);
+
+  if (WiFi.status() == WL_CONNECTED) {
+    std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure);
+    client->setInsecure();
+
+    String encodedCardData = "";
+    for (unsigned int i = 0; i < cardData.length(); i++) {
+      if (isalnum(cardData[i])) {
+        encodedCardData += cardData[i];
+      } else {
+        encodedCardData += String("%") + String((int)cardData[i], HEX);
+      }
+    }
+    String url = sheet_url + "?name=" + encodedCardData;
+    Serial.println("Sending to Google Sheets: " + url);
+
+    HTTPClient https;
+    Serial.print(F("[HTTPS] begin...\n"));
+    if (https.begin(*client, url)) {
+      Serial.print(F("[HTTPS] GET...\n"));
+      int httpCode = https.GET();
+      if (httpCode > 0) {
+        Serial.printf("[HTTPS] GET... code: %d\n", httpCode);
+        String payload = https.getString();
+        Serial.println("Response: " + payload);
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Data Recorded");
+        lcd.setCursor(0, 1);
+        lcd.print("Code: " + String(httpCode));
+        Serial.println("LCD: Data Recorded, Code: " + String(httpCode));
+        delay(5000);
+      } else {
+        Serial.printf("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Error Sending");
+        lcd.setCursor(0, 1);
+        lcd.print("Check Logs");
+        Serial.println("LCD: Error Sending, Check Logs");
+        delay(5000);
+      }
+      https.end();
+    } else {
+      Serial.println("[HTTPS] Unable to connect");
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("No Connection");
+      Serial.println("LCD: No Connection");
+      delay(5000);
+    }
+  }
+
+  // Reset RFID reader state
+  mfrc522.PICC_HaltA(); // Halt the current card
+  mfrc522.PCD_StopCrypto1(); // Stop cryptographic communication
+  delay(100); // Ensure reader is ready for next scan
+}
+
+void ReadDataFromBlock(int blockNum, byte readBlockData[]) {
+  for (byte i = 0; i < 6; i++) {
+    key.keyByte[i] = 0xFF;
+  }
+  status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, blockNum, &key, &(mfrc522.uid));
+  if (status != MFRC522::STATUS_OK) {
+    Serial.print("Authentication failed for Read: ");
+    Serial.println(mfrc522.GetStatusCodeName(status));
+    mfrc522.PICC_HaltA();
+    mfrc522.PCD_StopCrypto1();
+    return;
+  }
+  Serial.println("Authentication success");
+  status = mfrc522.MIFARE_Read(blockNum, readBlockData, &bufferLen);
+  if (status != MFRC522::STATUS_OK) {
+    Serial.print("Reading failed: ");
+    Serial.println(mfrc522.GetStatusCodeName(status));
+    mfrc522.PICC_HaltA();
+    mfrc522.PCD_StopCrypto1();
+    return;
+  }
+  Serial.println("Block was read successfully");
+}
