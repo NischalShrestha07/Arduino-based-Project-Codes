@@ -1,0 +1,139 @@
+#include <ESP8266WiFi.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <SPI.h>
+#include <MFRC522.h>
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>
+#include <ArduinoJson.h>
+
+// WiFi and Telegram settings
+#define WIFI_SSID "shrestha@vianet"           // Your WiFi SSID
+#define WIFI_PASSWORD "welcome98193"          // Your WiFi password
+#define BOT_TOKEN "7974099559:AAEo9tP0CwAkHXmlcSBSKI6ljGM00fDmZ98"  // Your Telegram bot token
+#define CHAT_ID "7685110912"                  // Your Telegram chat ID
+
+// Pins for RFID
+#define SS_PIN D4     // SDA
+#define RST_PIN D3    // RST
+
+// Buzzer pin
+#define BUZZER_PIN D8
+
+MFRC522 rfid(SS_PIN, RST_PIN);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+WiFiClientSecure client;
+UniversalTelegramBot bot(BOT_TOKEN, client);
+
+int total = 0;
+
+// RFID card UIDs
+byte noodlesUID[4] = {0x15, 0xD4, 0x43, 0x1F};
+byte appleUID[4]   = {0xB3, 0xBF, 0xA1, 0xA7};
+byte drinksUID[4]  = {0xDB, 0x7B, 0x9F, 0x28};
+byte totalUID[4]   = {0x13, 0xB5, 0x4A, 0x90};
+byte chipsUID[4]   = {0x25, 0x58, 0x55, 0x1F};
+
+void setup() {
+  Serial.begin(9600);
+  SPI.begin();
+  rfid.PCD_Init();
+
+  Wire.begin(); // Initialize I2C for ESP8266
+  lcd.begin(16, 2); // Initialize 16x2 LCD
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Scan Your Card");
+
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  // Connect to WiFi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  client.setInsecure(); // For simplicity; use proper certificates in production
+  Serial.print("Connecting to WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected! IP: " + WiFi.localIP().toString());
+
+  // Send Telegram startup message
+  String startupMessage = "RFID Shopping System started!";
+  bot.sendMessage(CHAT_ID, startupMessage, "");
+}
+
+void loop() {
+  if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) return;
+
+  buzz(); // Notify card detected
+
+  byte* uid = rfid.uid.uidByte;
+
+  if (compareUID(uid, noodlesUID)) {
+    addItem("Noodles", 30);
+  } 
+  else if (compareUID(uid, appleUID)) {
+    addItem("Charger", 1500);
+  } 
+  else if (compareUID(uid, drinksUID)) {
+    addItem("Fruiti", 35);
+  } 
+  else if (compareUID(uid, chipsUID)) {
+    addItem("Chips", 50);
+  } 
+  else if (compareUID(uid, totalUID)) {
+    showTotal();
+  } 
+  else {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Unknown Card");
+    String message = "Unknown card scanned!";
+    bot.sendMessage(CHAT_ID, message, "");
+  }
+
+  delay(2000); // Wait before next scan
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Scan Your Card");
+
+  rfid.PICC_HaltA();
+  rfid.PCD_StopCrypto1();
+}
+
+bool compareUID(byte *a, byte *b) {
+  for (byte i = 0; i < 4; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+void addItem(String name, int price) {
+  total += price;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(name + " Rs." + String(price));
+  lcd.setCursor(0, 1);
+  lcd.print("Added to Total");
+  Serial.println(name + ": Rs. " + String(price));
+  String message = name + " added: Rs. " + String(price);
+  bot.sendMessage(CHAT_ID, message, "");
+}
+
+void showTotal() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Total Amount:");
+  lcd.setCursor(0, 1);
+  lcd.print("Rs. " + String(total));
+  Serial.println("TOTAL: Rs. " + String(total));
+  String message = "Total amount: Rs. " + String(total);
+  bot.sendMessage(CHAT_ID, message, "");
+}
+
+void buzz() {
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(200);
+  digitalWrite(BUZZER_PIN, LOW);
+}
