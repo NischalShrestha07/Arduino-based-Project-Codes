@@ -1,0 +1,88 @@
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+
+// Motor control pins
+#define RM1 D5
+#define RM2 D7
+#define LM1 D6
+#define LM2 D4
+
+#define SIGNAL_TIMEOUT 1000
+unsigned long lastRecvTime = 0;
+
+struct PacketData {
+  byte xAxisValue;
+  byte yAxisValue;
+  byte switchPressed;
+};
+PacketData receiverData;
+
+void stopMotors() {
+  digitalWrite(RM1, LOW); digitalWrite(RM2, LOW);
+  digitalWrite(LM1, LOW); digitalWrite(LM2, LOW);
+}
+
+void rotateMotor(bool rightForward, bool leftForward) {
+  // Right motor
+  digitalWrite(RM1, rightForward);
+  digitalWrite(RM2, !rightForward);
+
+  // Left motor
+  digitalWrite(LM1, leftForward);
+  digitalWrite(LM2, !leftForward);
+}
+
+void simpleMovements() {
+  if (receiverData.yAxisValue <= 75) {
+    // Forward
+    rotateMotor(true, true);
+  }
+  else if (receiverData.yAxisValue >= 175) {
+    // Backward — FIXED HERE ✅
+    rotateMotor(false, false);
+  }
+  else if (receiverData.xAxisValue >= 175) {
+    // Turn Right
+    rotateMotor(false, true);
+  }
+  else if (receiverData.xAxisValue <= 75) {
+    // Turn Left
+    rotateMotor(true, false);
+  }
+  else {
+    stopMotors(); // Neutral
+  }
+}
+
+void OnDataRecv(uint8_t *mac, uint8_t *incomingData, uint8_t len) {
+  if (len == 0) return;
+
+  memcpy(&receiverData, incomingData, sizeof(receiverData));
+  Serial.printf("X:%d Y:%d\n", receiverData.xAxisValue, receiverData.yAxisValue);
+
+  simpleMovements();
+  lastRecvTime = millis();
+}
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
+
+  if (esp_now_init() != 0) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+
+  esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
+  esp_now_register_recv_cb(OnDataRecv);
+
+  pinMode(RM1, OUTPUT); pinMode(RM2, OUTPUT);
+  pinMode(LM1, OUTPUT); pinMode(LM2, OUTPUT);
+  stopMotors();
+}
+
+void loop() {
+  if (millis() - lastRecvTime > SIGNAL_TIMEOUT) {
+    stopMotors(); // Stop if signal lost
+}
+}
