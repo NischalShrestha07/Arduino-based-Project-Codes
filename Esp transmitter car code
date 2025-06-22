@@ -1,0 +1,60 @@
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+
+// Button pins
+#define UP_BTN     D1
+#define DOWN_BTN   D2
+#define LEFT_BTN   D3
+#define RIGHT_BTN  D4
+#define MODE_BTN   D5
+
+// Receiver MAC address (update if needed)
+uint8_t receiverMacAddress[] = {0x84, 0xF3, 0xEB, 0xB7, 0x82, 0x9C};
+
+struct PacketData {
+  byte xAxisValue;
+  byte yAxisValue;
+  byte switchPressed;
+};
+PacketData data;
+
+void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
+  Serial.println(sendStatus == 0 ? "✅ Sent" : "❌ Failed");
+}
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
+
+  if (esp_now_init() != 0) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+
+  esp_now_set_self_role(ESP_NOW_ROLE_CONTROLLER);
+  esp_now_register_send_cb(OnDataSent);
+  esp_now_add_peer(receiverMacAddress, ESP_NOW_ROLE_SLAVE, 1, NULL, 0);
+
+  pinMode(UP_BTN, INPUT_PULLUP);
+  pinMode(DOWN_BTN, INPUT_PULLUP);
+  pinMode(LEFT_BTN, INPUT_PULLUP);
+  pinMode(RIGHT_BTN, INPUT_PULLUP);
+  pinMode(MODE_BTN, INPUT_PULLUP);
+}
+
+void loop() {
+  // Default neutral
+  data.xAxisValue = 127;
+  data.yAxisValue = 127;
+  data.switchPressed = false;
+
+  if (digitalRead(UP_BTN) == LOW) data.yAxisValue = 0;
+  if (digitalRead(DOWN_BTN) == LOW) data.yAxisValue = 254;
+  if (digitalRead(LEFT_BTN) == LOW) data.xAxisValue = 0;
+  if (digitalRead(RIGHT_BTN) == LOW) data.xAxisValue = 254;
+  if (digitalRead(MODE_BTN) == LOW) data.switchPressed = true;
+
+  esp_now_send(receiverMacAddress, (uint8_t *)&data, sizeof(data));
+
+  delay(data.switchPressed ? 500 : 50); // Avoid multiple toggles
+}
