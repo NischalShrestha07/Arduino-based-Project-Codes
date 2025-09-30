@@ -1,0 +1,29 @@
+int mq=5;
+int led=4;
+int green=3;
+int x;
+
+void setup() {
+  pinMode(5,INPUT);
+  pinMode(4,OUTPUT);
+  // put your setup code here, to run once:
+
+}
+
+void loop() {
+  x=digitalRead(mq);
+  if(x==0)
+  {
+  digitalWrite(4,LOW);
+  digitalWrite(3,HIGH);
+  }
+  else
+  {
+    digitalWrite(3,LOW);
+
+    digitalWrite(4,HIGH);
+  }
+
+  // put your main code here, to run repeatedly:
+
+}
